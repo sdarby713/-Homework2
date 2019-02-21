@@ -1,0 +1,177 @@
+Dim ws As Worksheet
+Dim outrow As Long
+
+Dim prevticker As String
+Dim tickeropen As Double
+Dim tickerclose As Double
+Dim tickervolume As Double
+
+'variables in which we save our largest values
+Dim LgIncrTicker As String
+Dim LgIncrVal As Double
+Dim LgDecrTicker As String
+Dim LgDecrVal As Double
+Dim LgVolTicker As String
+Dim LgVolVal As Double
+
+
+Sub SummarizeStocks():
+
+'We assume the table will be pre-sorted in the order of ticker symbol
+'but we will check and enforce this.  "Trust But Verify"
+'The sequence is required because otherwise a single stock symbol could have
+'multiple non-contiguous partial summary lines rather than a single complete line.
+'The program could be written to accept input in any order
+'but this would add unnecessary complexity and mass to the process.
+
+
+Dim currow As Long
+Dim lastrow As Long
+
+Dim curticker As String
+Dim curdate As Long
+Dim prevdate As Long
+
+
+Dim tickerodate As Long
+Dim tickercdate As Long     ' saving the earliest and latest date as well as opening and closing prices
+                            ' allows us to bypass requirement that input be sorted by date as well.
+
+For Each ws In ActiveWorkbook.Worksheets
+
+    outrow = 2         ' pointer into the summary table
+    LgIncrVal = 0
+    LgDecrVal = 0
+    LgVolVal = 0
+
+' initialize our variables with data from the first non-header line of the table
+    prevticker = ws.Cells(2, 1)
+    prevdate = ws.Cells(2, 2)
+    tickerodate = ws.Cells(2, 2)
+    tickercdate = ws.Cells(2, 2)
+    tickeropen = ws.Cells(2, 3)
+    tickerclose = ws.Cells(2, 6)
+    tickervolume = ws.Cells(2, 7)
+
+' display the column headings of the output area
+    ws.Range("I1").Value = "Ticker"
+    ws.Range("J1").Value = "Yearly Change"
+    ws.Range("K1").Value = "Percent Change"
+    ws.Range("L1").Value = "Total Stock Volume"
+
+' find the number of the last row of the table
+    lastrow = ws.Cells(Rows.Count, 1).End(xlUp).Row
+
+    For currow = 3 To lastrow
+        curticker = ws.Cells(currow, 1).Value
+        curdate = ws.Cells(currow, 2).Value
+    
+        If curticker = prevticker Then
+            ' accumulate volume and update the open and close price if necessary
+            tickervolume = tickervolume + ws.Cells(currow, 7)
+        
+            If curdate < tickerodate Then
+                tickerodate = curdate
+                tickeropen = ws.Cells(currow, 3)
+            ElseIf curdate = tickerodate Then   ' we'll accept the latest notice, but flag as a warning
+                tickerodate = curdate
+                tickeropen = ws.Cells(currow, 3)
+                ' MsgBox ("Warning: possible duplicate record for ticker symbol " & curticker & ", date " & curdate)
+                ' warning message bypassed for the moment; there seems to be dup 1210 dates for every stock
+            End If
+        
+            If curdate > tickercdate Then
+                tickercdate = curdate
+                tickerclose = ws.Cells(currow, 6)
+            ElseIf curdate = tickercdate Then   ' we'll accept the latest notice, but flag as a warning
+                tickercdate = curdate
+                tickerclose = ws.Cells(currow, 6)
+                ' MsgBox ("Warning: possible duplicate record for ticker symbol " & curticker & ", date " & curdate)
+            End If
+        ElseIf curticker < prevticker Then
+            MsgBox ("Data needs to be sorted by Ticker Symbol")
+            Exit For
+        Else        'curticker > prevticker
+            ' we are done with this stock, so output what we have and start the new one fresh
+            outputrow
+                    
+            outrow = outrow + 1
+            tickeropen = ws.Cells(currow, 3)
+            tickerclose = ws.Cells(currow, 6)
+            tickervolume = ws.Cells(currow, 7)
+            tickerodate = ws.Cells(currow, 2)
+            tickercdate = ws.Cells(currow, 2)
+        End If
+    
+        ' save key variables before moving to the next row
+        prevticker = curticker
+        prevdate = curdate
+    
+    Next currow
+
+    ' one last row being held in memory that we need to output
+    outputrow
+
+    ' output the "Greatest" values here
+    ws.Range("P1").Value = "Ticker"
+    ws.Range("Q1").Value = "Value"
+    ws.Range("O2").Value = "Greatest % Increase"
+    ws.Range("O3").Value = "Greatest % Decrease"
+    ws.Range("O4").Value = "Greatest Total Volume"
+
+    ws.Range("P2").Value = LgIncrTicker
+    ws.Range("P3").Value = LgDecrTicker
+    ws.Range("P4").Value = LgVolTicker
+
+    ws.Range("Q2").Value = LgIncrVal
+    ws.Range("Q3").Value = LgDecrVal
+    ws.Range("Q4").Value = LgVolVal
+
+    ws.Range("Q2").Style = "Percent"
+    ws.Range("Q3").Style = "Percent"
+
+    ws.Columns("I:Q").AutoFit
+
+Next ws
+
+End Sub
+
+Sub outputrow():
+'----------------------------------------------------------------------------------------
+    ws.Cells(outrow, 9).Value = prevticker
+    ws.Cells(outrow, 10).Value = tickerclose - tickeropen
+    If tickeropen = 0 Then
+        ws.Cells(outrow, 11) = "N/A"
+    Else
+        ws.Cells(outrow, 11).Value = (tickerclose - tickeropen) / tickeropen
+    End If
+    ws.Cells(outrow, 12).Value = tickervolume
+    
+    ' add logic here to set the cell color
+    If ws.Cells(outrow, 10).Value > 0 Then
+        ws.Cells(outrow, 10).Interior.ColorIndex = 4  ' Green
+    ElseIf ws.Cells(outrow, 10).Value < 0 Then
+        ws.Cells(outrow, 10).Interior.ColorIndex = 3  ' Red
+    End If
+    ws.Cells(outrow, 11).Style = "Percent"
+    
+    ' since consideration of an individual stocmk is complete,
+    ' let's compare it to the current largest
+    If ws.Cells(outrow, 11) <> "N/A" Then
+        If ws.Cells(outrow, 11).Value > LgIncrVal Then
+            LgIncrVal = ws.Cells(outrow, 11).Value
+            LgIncrTicker = prevticker
+        ElseIf ws.Cells(outrow, 11).Value < LgDecrVal Then
+            LgDecrVal = ws.Cells(outrow, 11).Value
+            LgDecrTicker = prevticker
+        End If
+    End If
+    
+    If tickervolume > LgVolVal Then
+        LgVolVal = tickervolume
+        LgVolTicker = prevticker
+    End If
+'-------------------------------------------------------------------------------------------------
+    
+End Sub
+
