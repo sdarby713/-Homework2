@@ -1,1 +1,1 @@
-# -Homework2 VBA Scripting
+# -Stock Market Analysis:  example of Excel VBA coding
